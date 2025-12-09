@@ -35,6 +35,32 @@ serve(async (req: Request) => {
     // - check task_type in VALID_TYPES
     // - parse due_at and ensure it's in the future
 
+    // VALIDATION
+    // Check required fields
+    if (!application_id || !task_type || !due_at) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // Validate task_type
+    if (!VALID_TYPES.includes(task_type)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid task type" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // Validate due_at is in future
+    const dueDate = new Date(due_at);
+    if (isNaN(dueDate.getTime()) || dueDate <= new Date()) {
+      return new Response(
+        JSON.stringify({ error: "due_at must be a valid future datetime" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     // TODO: insert into tasks table using supabase client
 
     // Example:
@@ -43,6 +69,34 @@ serve(async (req: Request) => {
     //   .insert({ ... })
     //   .select()
     //   .single();
+
+    // INSERT INTO DATABASE
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({
+        application_id,
+        type: task_type,
+        due_at: dueDate.toISOString(),
+        status: "open",
+        tenant_id: crypto.randomUUID(), // replace this with actual tenant_id if 
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Insert error:", error);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // REALTIME BROADCAST
+    await supabase.realtime.broadcast("task.created", {
+      task_id: data.id,
+      application_id,
+      type: task_type,
+    });
 
     // TODO: handle error and return appropriate status code
 
@@ -53,8 +107,8 @@ serve(async (req: Request) => {
     // });
 
     return new Response(
-      JSON.stringify({ error: "Not implemented. Please complete this function." }),
-      { status: 501, headers: { "Content-Type": "application/json" } },
+      JSON.stringify({ success: true, task_id: data.id }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error(err);
