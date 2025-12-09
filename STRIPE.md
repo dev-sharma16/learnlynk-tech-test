@@ -1,0 +1,5 @@
+## Stripe Answer
+
+To support application fee payments, I’d start by creating a `payment_requests` record as soon as the user initiates checkout. This row stores the application_id, amount, and a “pending” status so we can track the payment lifecycle. After that, I would create a Stripe Checkout Session and pass the `payment_request_id` in the metadata so we can match the session to our database record. Once Stripe returns the session, I’d store the session ID and payment reference back into the same row for auditing and future lookups.
+
+On the backend, I’d implement a webhook handler that listens for Stripe events and verifies the signature to ensure the request is genuine. When the `checkout.session.completed` event fires, I’d update the corresponding `payment_requests` entry to “paid” and then update the related application’s stage or timeline to show that the fee has been successfully processed. This keeps the user experience smooth while ensuring every payment stays in sync with Supabase.
